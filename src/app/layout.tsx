@@ -23,10 +23,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.className}  antialiased`}
+        className={`${geistSans.className}  antialiased bg-slate-50`}
       >
         <Navbar />
-        <div className="min-h-[100vh]"> {children}</div>
+        <div className="min-h-[100vh] p-2"> {children}</div>
 
       <Footer />
       </body>
