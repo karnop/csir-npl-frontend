@@ -2,31 +2,50 @@
 
 import React, { useState, useRef, ChangeEvent } from 'react'
 import {
-    Check, AlertCircle, Calendar, User,
-    Hospital, Printer, Download, Share2
+    Check, AlertCircle, AlertTriangle, Calendar, User,
+    Hospital, Printer, Download, Share2, Loader, Info
 } from 'lucide-react'
 import { FileImage } from 'lucide-react'
 
+interface TopPrediction {
+    condition: string
+    probability: number
+    riskLevel: string
+    description: string
+}
+
+interface AllProbability {
+    condition: string
+    probability: number
+}
+
 interface Result {
     patientName: string
-    patientId:   string
-    testDate:    string
-    reportDate:  string
-    testType:    string
-    testId:      string
-    hasCancer:   boolean
-    confidence:  number
-    doctor:      string
-    hospital:    string
-    department:  string
-    notes:       string
+    patientId: string
+    testDate: string
+    reportDate: string
+    testType: string
+    testId: string
+    primaryCondition: string
+    primaryRiskLevel: string
+    primaryConfidence: number
+    primaryDescription: string
+    topPredictions: TopPrediction[]
+    allProbabilities: AllProbability[]
+    medicalRecommendation: string
+    doctor: string
+    hospital: string
+    department: string
+    fileName?: string
+    analysisStatus?: string
 }
 
 export default function Page() {
     const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-    const [file, setFile]           = useState<File | null>(null)
-    const [result, setResult]       = useState<Result | null>(null)
+    const [file, setFile] = useState<File | null>(null)
+    const [result, setResult] = useState<Result | null>(null)
     const inputRef = useRef<HTMLInputElement>(null)
+    const [loading, setLoading] = useState(false)
 
     const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
         const selected = e.target.files?.[0]
@@ -41,27 +60,60 @@ export default function Page() {
 
     const sendToAPI = async () => {
         if (!file) return
-        // (optional) you could pass an existing "result" object too
-        const metadata = {
-            foo: 123,     // or pull from some state
-            bar: "xyz"
+        setLoading(true)
+        try {
+            const metadata = {
+                patientName: "John Doe",
+                patientId: "PT-12345",
+                doctor: "Dr. Smith",
+                hospital: "City Medical Center"
+            }
+            const form = new FormData()
+            form.append("photo", file)
+            form.append("metadata", JSON.stringify(metadata))
+
+            const res = await fetch("/api/predict", {
+                method: "POST",
+                body: form,
+            })
+            if (!res.ok) {
+                throw new Error(await res.text())
+            }
+            const data: Result = await res.json()
+            setResult(data)
+        } catch (err) {
+            console.error("Upload error:", err)
+            // you could show a toast here…
+        } finally {
+            setLoading(false)
         }
+    }
 
-        const form = new FormData()
-        form.append('photo', file)
-        form.append('metadata', JSON.stringify(metadata))
-
-        const res = await fetch('/api/upload', {
-            method: 'POST',
-            body: form
-        })
-
-        if (!res.ok) {
-            console.error('Upload error', await res.text())
-            return
+    const getRiskLevelColor = (riskLevel: string) => {
+        switch (riskLevel) {
+            case 'high': return 'bg-red-100 text-red-700'
+            case 'moderate': return 'bg-yellow-100 text-yellow-700'
+            case 'low': return 'bg-blue-100 text-blue-700'
+            case 'none': return 'bg-green-100 text-green-700'
+            default: return 'bg-gray-100 text-gray-700'
         }
-        const data: Result = await res.json()
-        setResult(data)
+    }
+
+    const getRiskIcon = (riskLevel: string) => {
+        switch (riskLevel) {
+            case 'high': return <AlertCircle className="text-red-600" size={24} />
+            case 'moderate': return <AlertTriangle className="text-yellow-600" size={24} />
+            case 'low': return <Info className="text-blue-600" size={24} />
+            case 'none': return <Check className="text-green-600" size={24} />
+            default: return <Info className="text-gray-600" size={24} />
+        }
+    }
+
+    const formatConditionName = (condition: string) => {
+        return condition
+            .split('-')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ')
     }
 
     return (
@@ -96,11 +148,15 @@ export default function Page() {
                     </button>
                     <button
                         onClick={sendToAPI}
-                        disabled={!file}
-                        className={`text-sm basis-1/3 py-3 bg-blue-400 text-black font-bold rounded-md hover:opacity-90
-                        ${file ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+                        disabled={!file || loading}
+                        className={`text-sm basis-1/3 py-3 rounded-md
+                    ${file && !loading ? 'bg-blue-400 cursor-pointer' : 'bg-gray-300 cursor-not-allowed'}
+                    flex items-center justify-center`}
                     >
-                        Submit
+                        {loading
+                            ? <Loader className="animate-spin mr-2" size={16} />
+                            : <span>Submit</span>
+                        }
                     </button>
                 </div>
             </div>
@@ -114,25 +170,23 @@ export default function Page() {
                         {/* Header */}
                         <div className="bg-blue-400 p-4 flex justify-between items-center">
                             <div>
-                                <h1 className="text-white font-bold text-xl">Medical Screening Receipt</h1>
+                                <h1 className="text-white font-bold text-xl">Medical Analysis Report</h1>
                                 <p className="text-blue-100 text-sm">{result.hospital}</p>
                             </div>
                             <Hospital className="text-white" size={24} />
                         </div>
 
-                        {/* Banner */}
-                        <div className={`p-4 flex items-center justify-between
-                             ${result.hasCancer ? 'bg-red-100' : 'bg-green-100'}`}>
+                        {/* Primary Result Banner */}
+                        <div className={`p-4 flex items-center justify-between ${getRiskLevelColor(result.primaryRiskLevel)}`}>
                             <div className="flex items-center">
-                                {result.hasCancer
-                                    ? <AlertCircle className="text-red-600 mr-2" size={24} />
-                                    : <Check className="text-green-600 mr-2" size={24} />
-                                }
-                                <div>
-                                    <h2 className={`font-bold ${result.hasCancer ? 'text-red-700' : 'text-green-700'}`}>
-                                        {result.hasCancer ? 'Abnormality Detected' : 'No Abnormality Detected'}
+                                {getRiskIcon(result.primaryRiskLevel)}
+                                <div className="ml-2">
+                                    <h2 className="font-bold">
+                                        {formatConditionName(result.primaryCondition)}
                                     </h2>
-                                    <p className="text-sm text-gray-600">Confidence: {result.confidence}%</p>
+                                    <p className="text-sm opacity-80">
+                                        Confidence: {result.primaryConfidence}% | Risk: {result.primaryRiskLevel.toUpperCase()}
+                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -174,13 +228,51 @@ export default function Page() {
                                     <p className="font-medium">{result.doctor}</p>
                                 </div>
                             </div>
+                            {result.fileName && (
+                                <div className="mt-2">
+                                    <p className="text-gray-500 text-xs">File: {result.fileName}</p>
+                                </div>
+                            )}
                         </div>
 
-                        {/* Notes */}
+                        {/* Primary Finding */}
                         <div className="p-4 border-b">
-                            <h3 className="text-sm font-semibold text-gray-500 mb-2">NOTES</h3>
+                            <h3 className="text-sm font-semibold text-gray-500 mb-2">PRIMARY FINDING</h3>
                             <div className="bg-gray-50 p-3 rounded">
-                                <p className="text-sm text-gray-700">{result.notes}</p>
+                                <p className="font-medium text-sm mb-1">{formatConditionName(result.primaryCondition)}</p>
+                                <p className="text-xs text-gray-700 mb-2">{result.primaryDescription}</p>
+                                <div className="flex items-center justify-between text-xs">
+                                    <span className={`px-2 py-1 rounded ${getRiskLevelColor(result.primaryRiskLevel)}`}>
+                                        {result.primaryRiskLevel.toUpperCase()} RISK
+                                    </span>
+                                    <span className="text-gray-600">{result.primaryConfidence}% confidence</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Top 3 Predictions */}
+                        <div className="p-4 border-b">
+                            <h3 className="text-sm font-semibold text-gray-500 mb-2">TOP PREDICTIONS</h3>
+                            <div className="space-y-2">
+                                {result.topPredictions.slice(0, 3).map((pred, index) => (
+                                    <div key={index} className="flex justify-between items-center text-sm">
+                                        <div className="flex-1">
+                                            <p className="font-medium">{formatConditionName(pred.condition)}</p>
+                                            <p className="text-xs text-gray-500">{pred.riskLevel} risk</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="font-medium">{pred.probability}%</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Medical Recommendation */}
+                        <div className="p-4 border-b">
+                            <h3 className="text-sm font-semibold text-gray-500 mb-2">MEDICAL RECOMMENDATION</h3>
+                            <div className="bg-blue-50 p-3 rounded border-l-4 border-blue-400">
+                                <p className="text-sm text-blue-800">{result.medicalRecommendation}</p>
                             </div>
                         </div>
 
@@ -204,7 +296,11 @@ export default function Page() {
                         </div>
                     </div>
                 ) : (
-                    <p className="text-center text-gray-500">No result yet. Upload & submit a photo.</p>
+                    <div className="text-center text-gray-500 p-8">
+                        <FileImage className="mx-auto mb-4 text-gray-300" size={64} />
+                        <p className="text-lg mb-2">No analysis result yet</p>
+                        <p className="text-sm">Upload & submit a medical image to get started</p>
+                    </div>
                 )}
             </div>
 
